@@ -5,12 +5,38 @@ const normalize = (value = '') => value.toLowerCase().replace(/\s+/g, ' ').trim(
 
 const getRecordKey = (item) => `${item.name || 'unknown'}-${item.link || 'unknown'}`;
 
-const getSafeLink = (link = '') => {
-  if (!link) return '#';
-  if (/^https?:\/\//i.test(link) || /^mailto:/i.test(link)) {
-    return link;
+const normalizeLink = (rawLink = '') => {
+  if (!rawLink) return '#';
+
+  const trimmed = String(rawLink).trim();
+  const withoutQuotes = trimmed.replace(/^['\"]|['\"]$/g, '');
+  const cleaned = withoutQuotes.replace(/\s+/g, '').replace(/\u00a0/g, '');
+
+  if (!cleaned) return '#';
+
+  if (/^https?:\/\//i.test(cleaned) || /^mailto:/i.test(cleaned) || /^tel:/i.test(cleaned)) {
+    return cleaned;
   }
-  return `https://${link.replace(/^\/+/, '')}`;
+
+  if (cleaned.startsWith('//')) {
+    return `https:${cleaned}`;
+  }
+
+  if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/.*)?$/i.test(cleaned)) {
+    return `https://${cleaned}`;
+  }
+
+  if (cleaned.includes('.') && !/^\w+\s/.test(cleaned)) {
+    return `https://${cleaned.replace(/^\/+/, '')}`;
+  }
+
+  return `https://${cleaned.replace(/^\/+/, '')}`;
+};
+
+const getSafeLink = (link = '') => {
+  const normalized = normalizeLink(link);
+  if (!normalized || normalized === '#') return '#';
+  return normalized;
 };
 
 const statusStyles = {
@@ -44,7 +70,7 @@ export default function App() {
         normalizedQuery.length === 0 ||
         [item.name, item.link, item.category, item.notes, item.added_by, item.status]
           .filter(Boolean)
-          .some((value) => normalize(value).includes(normalizedQuery));
+          .some((value) => normalize(String(value)).includes(normalizedQuery));
 
       const matchesCategory = category === 'All' || item.category === category;
       const matchesStatus =
@@ -296,54 +322,69 @@ export default function App() {
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredEntries.length > 0 ? (
-              filteredEntries.map((item) => (
-                <article
-                  key={getRecordKey(item)}
-                  className="group flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-950/60 p-4 transition hover:-translate-y-0.5 hover:border-cyan-400/60 hover:bg-slate-950/80"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">{item.category || 'General'}</p>
-                      <h3 className="mt-2 text-xl font-bold text-white">{item.name}</h3>
+              filteredEntries.map((item) => {
+                const link = getSafeLink(item.link);
+
+                return (
+                  <article
+                    key={getRecordKey(item)}
+                    className="group flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-950/60 p-4 transition hover:-translate-y-0.5 hover:border-cyan-400/60 hover:bg-slate-950/80"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">{item.category || 'General'}</p>
+                        <h3 className="mt-2 text-xl font-bold text-white">{item.name}</h3>
+                      </div>
+
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[item.status] || statusStyles["Doesn't work"]}`}
+                      >
+                        {item.status || (item.works ? 'Works' : "Doesn't work")}
+                      </span>
                     </div>
 
-                    <span
-                      className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusStyles[item.status] || statusStyles['Doesn\'t work']}`}
-                    >
-                      {item.status || (item.works ? 'Works' : "Doesn't work")}
-                    </span>
-                  </div>
+                    <p className="mt-4 break-all text-sm text-slate-300">{item.link}</p>
 
-                  <p className="mt-4 text-sm text-slate-300">{item.link}</p>
-
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
-                    <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
-                      Ease {item.ease_of_use ?? 0}/5
-                    </span>
-                    <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
-                      {item.added_by || 'Community'}
-                    </span>
-                    {item.date_checked ? (
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-300">
                       <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
-                        {item.date_checked}
+                        Ease {item.ease_of_use ?? 0}/5
                       </span>
-                    ) : null}
-                  </div>
+                      <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
+                        {item.added_by || 'Community'}
+                      </span>
+                      {item.date_checked ? (
+                        <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1">
+                          {item.date_checked}
+                        </span>
+                      ) : null}
+                    </div>
 
-                  {item.notes ? <p className="mt-4 text-sm leading-6 text-slate-300">{item.notes}</p> : null}
+                    {item.notes ? <p className="mt-4 text-sm leading-6 text-slate-300">{item.notes}</p> : null}
 
-                  <div className="mt-auto pt-4">
-                    <a
-                      href={getSafeLink(item.link)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-full bg-cyan-400 px-3.5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-                    >
-                      Open link
-                    </a>
-                  </div>
-                </article>
-              ))
+                    <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center rounded-full bg-cyan-400 px-3.5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                      >
+                        Open link
+                      </a>
+
+                      {link !== '#' ? (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-slate-300 underline-offset-2 hover:text-cyan-300 hover:underline"
+                        >
+                          Visit site
+                        </a>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              })
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-8 text-center text-slate-300 md:col-span-2 xl:col-span-3">
                 No records match your current search. Try a different keyword or filter.
